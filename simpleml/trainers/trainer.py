@@ -40,6 +40,8 @@ _TRAINING_DEFAULTS: dict[str, Any] = {
     "log_dir": "runs",
     "scheduler_step_on": "epoch",
     "val_every": 1,
+    "best_metric": None,
+    "best_metric_mode": "max",
 }
 
 
@@ -99,6 +101,9 @@ class Trainer:
 
         self.global_step = 0
         self.best_val_loss = math.inf
+        self.best_metric_value = (
+            -math.inf if self._cfg["best_metric_mode"] == "max" else math.inf
+        )
 
         self._use_amp = self._cfg["mixed_precision"] and self.device.type == "cuda"
         self._scaler = GradScaler("cuda") if self._use_amp else None
@@ -186,10 +191,10 @@ class Trainer:
                 last_metrics = val_result.get("metrics", {})
                 self._log_metrics({"loss": last_val_loss}, epoch, prefix="val")
                 self._log_metrics(last_metrics, epoch, prefix="val")
-                self._maybe_save_checkpoint(epoch, last_val_loss)
+                self._maybe_save_checkpoint(epoch, last_val_loss, last_metrics)
             else:
                 last_metrics = {}
-                self._maybe_save_checkpoint(epoch, None)
+                self._maybe_save_checkpoint(epoch, None, {})
 
             summary: dict[str, Any] = {"train_loss": f"{last_train_loss:.4f}"}
             if last_val_loss is not None:
@@ -246,6 +251,7 @@ class Trainer:
                 self.scheduler.state_dict() if self.scheduler else None
             ),
             "best_val_loss": self.best_val_loss,
+            "best_metric_value": self.best_metric_value,
             "val_loss": val_loss,
             "training_config": self._cfg,
         }
@@ -267,6 +273,10 @@ class Trainer:
             self.scheduler.load_state_dict(state["scheduler_state_dict"])
         self.global_step = state.get("global_step", 0)
         self.best_val_loss = state.get("best_val_loss", math.inf)
+        self.best_metric_value = state.get(
+            "best_metric_value",
+            -math.inf if self._cfg["best_metric_mode"] == "max" else math.inf,
+        )
         return state["epoch"] + 1
 
     # ------------------------------------------------------------------
@@ -439,20 +449,48 @@ class Trainer:
 
         return {"loss": avg_loss, "metrics": computed_metrics}
 
-    def _maybe_save_checkpoint(self, epoch: int, val_loss: float | None) -> None:
+    def _maybe_save_checkpoint(
+        self,
+        epoch: int,
+        val_loss: float | None,
+        metrics: dict[str, float] | None = None,
+    ) -> None:
         """Conditionally save checkpoints based on config.
+
+        When ``best_metric`` is configured, the best checkpoint is determined by
+        that metric (using ``best_metric_mode`` to decide direction). Otherwise
+        falls back to ``val_loss`` (lower is better).
 
         Args:
             epoch: Current epoch index.
             val_loss: Validation loss (None if no validation was run).
+            metrics: Dict of computed metric names to values for this epoch.
         """
         ckpt_dir = Path(self._cfg["checkpoint_dir"])
         epochs = self._cfg["epochs"]
+        metrics = metrics or {}
+        best_metric = self._cfg["best_metric"]
 
-        if val_loss is not None and val_loss < self.best_val_loss:
-            self.best_val_loss = val_loss
-            if self._cfg["save_best"]:
-                self.save_checkpoint(ckpt_dir / self._cfg["best_filename"], epoch, val_loss)
+        if self._cfg["save_best"]:
+            if best_metric is not None:
+                value = metrics.get(best_metric)
+                if value is not None:
+                    mode = self._cfg["best_metric_mode"]
+                    is_best = (
+                        value > self.best_metric_value
+                        if mode == "max"
+                        else value < self.best_metric_value
+                    )
+                    if is_best:
+                        self.best_metric_value = value
+                        self.save_checkpoint(
+                            ckpt_dir / self._cfg["best_filename"], epoch, val_loss
+                        )
+            elif val_loss is not None and val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.save_checkpoint(
+                    ckpt_dir / self._cfg["best_filename"], epoch, val_loss
+                )
 
         if self._cfg["save_every"] and (epoch + 1) % self._cfg["save_every"] == 0:
             self.save_checkpoint(ckpt_dir / f"epoch_{epoch + 1}.pt", epoch, val_loss)

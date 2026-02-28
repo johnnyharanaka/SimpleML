@@ -218,6 +218,8 @@ Merge any key into the `training` / `inference` config sections.
     checkpoint_dir="checkpoints",
     log_dir="runs",
     val_every=1,
+    best_metric="Accuracy",   # optional: metric to monitor for best checkpoint
+    best_metric_mode="max",   # "max" (accuracy, f1) or "min" (loss-like metrics)
 )
 .infer_config(batch_size=32, device="mps")
 ```
@@ -261,13 +263,29 @@ All components are registered by name and selected via config.
 | Metrics     | `Accuracy`, `F1Score`, `Precision`, `Recall`, `AUROC`, `ConfusionMatrix` |
 | Datasets    | `ImageFolderDataset`, `COCOClassificationDataset`                |
 
+## Best Checkpoint by Metric
+
+By default, the best checkpoint is saved based on the lowest `val_loss`. To monitor a specific metric instead, set `best_metric` in the training config:
+
+```python
+# Via fluent API
+.train_config(best_metric="Accuracy", best_metric_mode="max")
+
+# Via YAML
+# training:
+#   best_metric: Accuracy
+#   best_metric_mode: max  # "max" for higher-is-better, "min" for lower-is-better
+```
+
+The metric name must match the class name of the metric registered in `.metrics()` (e.g. `Accuracy`, `F1Score`, `AUROC`). When `best_metric` is not set, the trainer falls back to `val_loss`.
+
 ## Training Features
 
 - Automatic device selection (MPS > CUDA > CPU)
 - Mixed precision training (CUDA)
 - Gradient clipping (norm and value)
 - TensorBoard logging
-- Best and last checkpoint saving
+- Best and last checkpoint saving (by `val_loss` or any metric)
 - Resume from checkpoint
 - Configurable validation frequency
 

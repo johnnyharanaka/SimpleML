@@ -286,3 +286,183 @@ class TestConfusionMatrix:
         metric = METRICS.build("ConfusionMatrix", num_classes=C)
         result = metric(preds, targets)
         assert result.diag().sum().item() == B
+
+
+# ---------------------------------------------------------------------------
+# MeanAveragePrecision
+# ---------------------------------------------------------------------------
+
+
+def _det_sample(
+    box: list[float],
+    score: float,
+    label: int,
+) -> dict:
+    """Build a single-detection prediction dict."""
+    return {
+        "boxes": torch.tensor([box], dtype=torch.float32),
+        "scores": torch.tensor([score]),
+        "labels": torch.tensor([label]),
+    }
+
+
+def _gt_sample(box: list[float], label: int) -> dict:
+    """Build a single ground-truth dict."""
+    return {
+        "boxes": torch.tensor([box], dtype=torch.float32),
+        "labels": torch.tensor([label]),
+    }
+
+
+class TestMeanAveragePrecision:
+    def test_registered(self) -> None:
+        assert "MeanAveragePrecision" in METRICS
+
+    def test_build(self) -> None:
+        metric = METRICS.build("MeanAveragePrecision")
+        assert isinstance(metric, Metric)
+
+    def test_perfect_map(self) -> None:
+        pred = _det_sample([0.0, 0.0, 10.0, 10.0], 0.9, 0)
+        target = _gt_sample([0.0, 0.0, 10.0, 10.0], 0)
+        metric = METRICS.build("MeanAveragePrecision")
+        result = metric([pred], [target])
+        assert result == pytest.approx(1.0)
+
+    def test_no_overlap_gives_zero(self) -> None:
+        pred = _det_sample([100.0, 100.0, 110.0, 110.0], 0.9, 0)
+        target = _gt_sample([0.0, 0.0, 10.0, 10.0], 0)
+        metric = METRICS.build("MeanAveragePrecision")
+        result = metric([pred], [target])
+        assert result == pytest.approx(0.0)
+
+    def test_multi_class(self) -> None:
+        preds = [
+            {
+                "boxes": torch.tensor([[0.0, 0.0, 10.0, 10.0], [20.0, 20.0, 30.0, 30.0]]),
+                "scores": torch.tensor([0.9, 0.8]),
+                "labels": torch.tensor([0, 1]),
+            }
+        ]
+        targets = [
+            {
+                "boxes": torch.tensor([[0.0, 0.0, 10.0, 10.0], [20.0, 20.0, 30.0, 30.0]]),
+                "labels": torch.tensor([0, 1]),
+            }
+        ]
+        metric = METRICS.build("MeanAveragePrecision")
+        result = metric(preds, targets)
+        assert result == pytest.approx(1.0)
+
+    def test_multi_batch_accumulation(self) -> None:
+        metric = METRICS.build("MeanAveragePrecision")
+        pred1 = _det_sample([0.0, 0.0, 10.0, 10.0], 0.9, 0)
+        target1 = _gt_sample([0.0, 0.0, 10.0, 10.0], 0)
+        pred2 = _det_sample([5.0, 5.0, 15.0, 15.0], 0.8, 0)
+        target2 = _gt_sample([5.0, 5.0, 15.0, 15.0], 0)
+        metric.update([pred1], [target1])
+        metric.update([pred2], [target2])
+        result = metric.compute()
+        assert result == pytest.approx(1.0)
+
+    def test_custom_iou_threshold(self) -> None:
+        # Box with IoU ~0.25 relative to GT — passes 0.2, fails 0.5
+        pred = _det_sample([5.0, 0.0, 15.0, 10.0], 0.9, 0)
+        target = _gt_sample([0.0, 0.0, 10.0, 10.0], 0)
+        metric_low = METRICS.build("MeanAveragePrecision", iou_threshold=0.2)
+        metric_high = METRICS.build("MeanAveragePrecision", iou_threshold=0.5)
+        assert metric_low([pred], [target]) == pytest.approx(1.0)
+        assert metric_high([pred], [target]) == pytest.approx(0.0)
+
+    def test_compute_before_update_raises(self) -> None:
+        metric = METRICS.build("MeanAveragePrecision")
+        with pytest.raises(RuntimeError, match="called before any update"):
+            metric.compute()
+
+    def test_reset_clears_state(self) -> None:
+        pred = _det_sample([0.0, 0.0, 10.0, 10.0], 0.9, 0)
+        target = _gt_sample([0.0, 0.0, 10.0, 10.0], 0)
+        metric = METRICS.build("MeanAveragePrecision")
+        metric.update([pred], [target])
+        metric.reset()
+        with pytest.raises(RuntimeError):
+            metric.compute()
+
+
+# ---------------------------------------------------------------------------
+# CorLoc
+# ---------------------------------------------------------------------------
+
+
+class TestCorLoc:
+    def test_registered(self) -> None:
+        assert "CorLoc" in METRICS
+
+    def test_build(self) -> None:
+        metric = METRICS.build("CorLoc")
+        assert isinstance(metric, Metric)
+
+    def test_perfect_corloc(self) -> None:
+        preds = torch.tensor([[0.0, 0.0, 10.0, 10.0, 0.9]])
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric = METRICS.build("CorLoc")
+        assert metric(preds, targets) == pytest.approx(1.0)
+
+    def test_no_overlap(self) -> None:
+        preds = torch.tensor([[100.0, 100.0, 110.0, 110.0, 0.9]])
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric = METRICS.build("CorLoc")
+        assert metric(preds, targets) == pytest.approx(0.0)
+
+    def test_fraction(self) -> None:
+        metric = METRICS.build("CorLoc")
+        # Image 1: correct
+        metric.update(
+            torch.tensor([[0.0, 0.0, 10.0, 10.0, 0.9]]),
+            torch.tensor([[0.0, 0.0, 10.0, 10.0]]),
+        )
+        # Image 2: miss
+        metric.update(
+            torch.tensor([[100.0, 100.0, 110.0, 110.0, 0.9]]),
+            torch.tensor([[0.0, 0.0, 10.0, 10.0]]),
+        )
+        assert metric.compute() == pytest.approx(0.5)
+
+    def test_empty_preds_is_miss(self) -> None:
+        preds = torch.zeros(0, 5)
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric = METRICS.build("CorLoc")
+        assert metric(preds, targets) == pytest.approx(0.0)
+
+    def test_top_scoring_box_is_used(self) -> None:
+        # Second box has higher score and overlaps; first box does not
+        preds = torch.tensor([
+            [100.0, 100.0, 110.0, 110.0, 0.3],
+            [0.0, 0.0, 10.0, 10.0, 0.9],
+        ])
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric = METRICS.build("CorLoc")
+        assert metric(preds, targets) == pytest.approx(1.0)
+
+    def test_custom_iou_threshold(self) -> None:
+        # Box with IoU ~0.25 relative to GT
+        preds = torch.tensor([[5.0, 0.0, 15.0, 10.0, 0.9]])
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric_low = METRICS.build("CorLoc", iou_threshold=0.2)
+        metric_high = METRICS.build("CorLoc", iou_threshold=0.5)
+        assert metric_low(preds, targets) == pytest.approx(1.0)
+        assert metric_high(preds, targets) == pytest.approx(0.0)
+
+    def test_compute_before_update_raises(self) -> None:
+        metric = METRICS.build("CorLoc")
+        with pytest.raises(RuntimeError, match="called before any update"):
+            metric.compute()
+
+    def test_reset_clears_state(self) -> None:
+        preds = torch.tensor([[0.0, 0.0, 10.0, 10.0, 0.9]])
+        targets = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
+        metric = METRICS.build("CorLoc")
+        metric.update(preds, targets)
+        metric.reset()
+        with pytest.raises(RuntimeError):
+            metric.compute()
