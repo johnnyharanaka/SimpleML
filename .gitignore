@@ -1,6 +1,11 @@
 *.egg-info/
-__pycache__/
-.venv/
-.pytest_cache/
 *.pyc
+__pycache__/
+.pytest_cache/
+checkpoints/
+.claude/
 .idea/
+data/
+runs/
+.venv/
+CLAUDE.md

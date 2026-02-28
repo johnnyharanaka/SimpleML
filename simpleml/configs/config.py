@@ -6,6 +6,7 @@ import copy
 from pathlib import Path
 from typing import Any
 
+import torch
 import yaml
 
 from simpleml.registries import (
@@ -93,6 +94,8 @@ class Config:
             raise ValueError(f"'{name}' section must contain a 'name' key")
         if "params" in section and not isinstance(section["params"], dict):
             raise TypeError(f"'{name}.params' must be a mapping")
+        if "weights" in section and not isinstance(section["weights"], str):
+            raise TypeError(f"'{name}.weights' must be a string path")
 
     @staticmethod
     def _validate_dataset(section: Any) -> None:
@@ -137,9 +140,20 @@ class Config:
     # ------------------------------------------------------------------
 
     def build_model(self) -> Any:
-        """Build the model from the registry."""
+        """Build the model from the registry.
+
+        If the model section contains a ``weights`` key, the corresponding
+        file is loaded as a state dict after construction.
+        """
         sec = self._data["model"]
-        return MODELS.build(sec["name"], **sec.get("params", {}))
+        model = MODELS.build(sec["name"], **sec.get("params", {}))
+        if "weights" in sec:
+            weights_path = Path(sec["weights"])
+            if not weights_path.exists():
+                raise FileNotFoundError(f"Weights file not found: {weights_path}")
+            state_dict = torch.load(weights_path, weights_only=True)
+            model.load_state_dict(state_dict)
+        return model
 
     def build_loss(self) -> Any:
         """Build the loss function from the registry."""

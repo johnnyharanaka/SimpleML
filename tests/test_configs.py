@@ -164,6 +164,12 @@ class TestConfigValidation:
         with pytest.raises(TypeError, match="metrics\\[0\\].params must be a mapping"):
             Config(data)
 
+    def test_model_weights_not_a_string(self) -> None:
+        data = _minimal_config()
+        data["model"]["weights"] = 123
+        with pytest.raises(TypeError, match="'model.weights' must be a string"):
+            Config(data)
+
     def test_scheduler_validated(self) -> None:
         data = _minimal_config()
         data["scheduler"] = {"missing_name": True}
@@ -235,6 +241,32 @@ class TestConfigBuildModel:
         cfg = Config(_minimal_config())
         model = cfg.build_model()
         assert type(model).__name__ in MODELS
+
+    def test_build_model_with_weights(self, tmp_path) -> None:
+        cfg = Config(_minimal_config())
+        ref_model = cfg.build_model()
+        weights_path = tmp_path / "weights.pt"
+        torch.save(ref_model.state_dict(), weights_path)
+
+        data = _minimal_config()
+        data["model"]["weights"] = str(weights_path)
+        cfg2 = Config(data)
+        loaded = cfg2.build_model()
+        for p1, p2 in zip(ref_model.parameters(), loaded.parameters()):
+            assert torch.equal(p1, p2)
+
+    def test_build_model_weights_file_not_found(self) -> None:
+        data = _minimal_config()
+        data["model"]["weights"] = "/nonexistent/weights.pt"
+        cfg = Config(data)
+        with pytest.raises(FileNotFoundError, match="Weights file not found"):
+            cfg.build_model()
+
+    def test_build_model_without_weights(self) -> None:
+        cfg = Config(_minimal_config())
+        model = cfg.build_model()
+        assert isinstance(model, nn.Module)
+        assert "weights" not in _minimal_config()["model"]
 
 
 # ---------------------------------------------------------------------------
