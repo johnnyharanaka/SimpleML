@@ -1,0 +1,48 @@
+model:
+  name: TimmModel
+  params:
+    model_name: resnet18
+    pretrained: true
+    num_classes: 10
+
+dataset:
+  train:
+    name: ImageFolderDataset
+    params:
+      root: data/cifar10/train
+  val:
+    name: ImageFolderDataset
+    params:
+      root: data/cifar10/val
+
+loss:
+  name: CrossEntropyLoss
+  params:
+    label_smoothing: 0.1
+
+optimizer:
+  name: AdamW
+  params:
+    lr: 1e-3
+    weight_decay: 1e-4
+
+scheduler:
+  name: CosineAnnealingLR
+  params:
+    T_max: 20
+
+metrics:
+  - name: Accuracy
+  - name: F1Score
+    params:
+      average: weighted
+
+training:
+  epochs: 20
+  batch_size: 64
+  device: mps
+  save_best: true
+  save_last: true
+  checkpoint_dir: checkpoints
+  log_dir: runs
+  val_every: 1
