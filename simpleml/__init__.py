@@ -17,12 +17,18 @@ import simpleml.models  # noqa: F401, E402  # isort: skip
 import simpleml.metrics  # noqa: F401, E402  # isort: skip
 import simpleml.optimizers  # noqa: F401, E402  # isort: skip
 import simpleml.trainers  # noqa: F401, E402  # isort: skip
+import simpleml.inference  # noqa: F401, E402  # isort: skip
 
+from simpleml.api import API
 from simpleml.configs import Config
+from simpleml.inference import PredictionResult, Predictor
 from simpleml.trainers import Trainer
 
 __all__ = [
+    "API",
     "Config",
+    "Predictor",
+    "PredictionResult",
     "Trainer",
     "Registry",
     "MODELS",

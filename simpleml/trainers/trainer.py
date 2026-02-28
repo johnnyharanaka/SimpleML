@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import math
+import random
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 import torch
 from torch import nn
@@ -16,6 +19,7 @@ from simpleml.configs.config import Config
 from simpleml.metrics.base import Metric
 
 _TRAINING_DEFAULTS: dict[str, Any] = {
+    "seed": None,
     "epochs": 10,
     "batch_size": 32,
     "num_workers": 0,
@@ -72,6 +76,8 @@ class Trainer:
             training_config: Optional dict overriding training defaults.
         """
         self._cfg = {**_TRAINING_DEFAULTS, **(training_config or {})}
+
+        self.seed = self._apply_seed(self._cfg["seed"])
 
         self.device = self._resolve_device(self._cfg["device"])
         self.model = model.to(self.device)
@@ -254,6 +260,29 @@ class Trainer:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_seed(seed: int | None) -> int:
+        """Set global random seeds and return the seed used.
+
+        If ``seed`` is None, a random seed is generated and printed so the run
+        remains reproducible.
+
+        Args:
+            seed: Desired seed, or None to auto-generate.
+
+        Returns:
+            The seed that was applied.
+        """
+        if seed is None:
+            seed = random.randint(0, 2**31 - 1)
+            print(f"[SimpleML] No seed provided — using seed={seed}")
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        return seed
 
     @staticmethod
     def _resolve_device(device_str: str) -> torch.device:

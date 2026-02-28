@@ -14,6 +14,10 @@ dataset:
     name: ImageFolderDataset
     params:
       root: data/cifar10/val
+  test:
+    name: ImageFolderDataset
+    params:
+      root: data/cifar10/test
 
 loss:
   name: CrossEntropyLoss
@@ -46,3 +50,7 @@ training:
   checkpoint_dir: checkpoints
   log_dir: runs
   val_every: 1
+
+inference:
+  batch_size: 64
+  device: mps
