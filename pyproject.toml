@@ -33,6 +33,8 @@ select = ["E", "F", "I", "N", "W"]
 
 [tool.ruff.lint.per-file-ignores]
 "simpleml/datasets/image_folder.py" = ["N812"]
+"simpleml/optimizers/cosine_annealing.py" = ["N803"]
+"simpleml/optimizers/cosine_annealing_warm_restarts.py" = ["N803"]
 "tests/test_datasets.py" = ["N812"]
 
 [tool.pytest.ini_options]
