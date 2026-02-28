@@ -3,6 +3,7 @@
 __pycache__/
 .pytest_cache/
 checkpoints/
+custom_models/
 configs/
 .claude/
 .idea/
