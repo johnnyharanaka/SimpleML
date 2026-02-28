@@ -38,12 +38,12 @@ class ImageFolderDataset(Dataset):
     def __init__(
         self,
         root: str,
-        transform: A.Compose | None = None,
+        transform: A.Compose | list[dict] | None = None,
         extensions: tuple[str, ...] = DEFAULT_EXTENSIONS,
     ) -> None:
         self.root = Path(root)
         self.extensions = tuple(ext.lower() for ext in extensions)
-        self.transform = transform
+        self.transform = self._build_transform(transform) if isinstance(transform, list) else transform
 
         self._classes = sorted(d.name for d in self.root.iterdir() if d.is_dir())
         if not self._classes:
@@ -64,10 +64,27 @@ class ImageFolderDataset(Dataset):
                 f"No images with extensions {self.extensions} found in {self.root}"
             )
 
-        self._to_tensor = A.Compose([
-            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ToTensorV2(),
-        ])
+        self._to_tensor = A.Compose([ToTensorV2()])
+
+    @staticmethod
+    def _build_transform(transform_list: list[dict]) -> A.Compose:
+        """Build an ``A.Compose`` pipeline from a list of transform dicts.
+
+        Each dict must have a ``name`` key matching an Albumentations class and
+        an optional ``params`` mapping. ``ToTensorV2`` is resolved from
+        ``albumentations.pytorch``; all others from the ``albumentations``
+        namespace.
+        """
+        transforms = []
+        for entry in transform_list:
+            name = entry["name"]
+            params = entry.get("params", {})
+            if name == "ToTensorV2":
+                transforms.append(ToTensorV2(**params))
+            else:
+                cls = getattr(A, name)
+                transforms.append(cls(**params))
+        return A.Compose(transforms)
 
     @property
     def classes(self) -> list[str]:

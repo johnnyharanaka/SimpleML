@@ -3,11 +3,11 @@ from simpleml import API
 def main():
     exp = API.from_yaml("configs/resnet.yaml")
 
-    results = exp.fit()
-    print("Training results:", results)
+    exp.fit()
 
     eval_results = exp.evaluate("test", checkpoint="checkpoints/resnet.pth")
-    print("Evaluation results:", eval_results)
+    print("Evaluation results:")
+    print(f"Accuracy: {eval_results['metrics']['Accuracy']}")
 
 if __name__ == "__main__":
   main()

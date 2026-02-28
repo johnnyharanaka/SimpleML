@@ -20,6 +20,7 @@ import simpleml.trainers  # noqa: F401, E402  # isort: skip
 import simpleml.inference  # noqa: F401, E402  # isort: skip
 
 from simpleml.api import API
+from simpleml.logger import get_logger, log_error, log_info, log_warning
 from simpleml.configs import Config
 from simpleml.inference import PredictionResult, Predictor
 from simpleml.trainers import Trainer
@@ -31,6 +32,10 @@ __all__ = [
     "PredictionResult",
     "Trainer",
     "Registry",
+    "get_logger",
+    "log_info",
+    "log_warning",
+    "log_error",
     "MODELS",
     "LOSSES",
     "DATASETS",

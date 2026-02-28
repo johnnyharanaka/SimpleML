@@ -18,6 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from simpleml.configs.config import Config
+from simpleml.logger import log_info
 from simpleml.metrics.base import Metric
 
 _TRAINING_DEFAULTS: dict[str, Any] = {
@@ -165,7 +166,7 @@ class Trainer:
         last_metrics: dict[str, float] = {}
 
         for epoch in range(start_epoch, epochs):
-            print(f"\nEpoch {epoch + 1}/{epochs}")
+            log_info(f"Epoch {epoch + 1}/{epochs}")
             last_train_loss = self._train_one_epoch(epoch)
             self._log_metrics({"loss": last_train_loss}, epoch, prefix="train")
             self._log_metrics(
@@ -194,7 +195,7 @@ class Trainer:
             if last_val_loss is not None:
                 summary["val_loss"] = f"{last_val_loss:.4f}"
             summary.update({k: f"{v:.4f}" for k, v in last_metrics.items()})
-            print("  " + "  ".join(f"{k}: {v}" for k, v in summary.items()))
+            log_info("  ".join(f"{k}: {v}" for k, v in summary.items()))
 
         self._writer.close()
 
@@ -287,7 +288,7 @@ class Trainer:
         """
         if seed is None:
             seed = random.randint(0, 2**31 - 1)
-            print(f"[SimpleML] No seed provided — using seed={seed}")
+            log_info(f"No seed provided — using seed={seed}")
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -349,9 +350,12 @@ class Trainer:
         """
         self.model.train()
         total_loss = 0.0
+        total_correct = 0
+        total_samples = 0
         num_batches = 0
 
-        for batch in tqdm(self.train_loader, desc=f"  train", leave=False):
+        pbar = tqdm(self.train_loader, desc="  train", leave=False)
+        for batch in pbar:
             inputs, targets = batch[0].to(self.device), batch[1].to(self.device)
 
             self.optimizer.zero_grad()
@@ -388,8 +392,15 @@ class Trainer:
                 self.optimizer.step()
 
             total_loss += loss.item()
+            total_correct += (outputs.argmax(dim=1) == targets).sum().item()
+            total_samples += targets.size(0)
             num_batches += 1
             self.global_step += 1
+
+            pbar.set_postfix({
+                "loss": f"{total_loss / num_batches:.4f}",
+                "acc": f"{total_correct / total_samples:.4f}",
+            })
 
             if self.scheduler and self._cfg["scheduler_step_on"] == "step":
                 self.scheduler.step()
