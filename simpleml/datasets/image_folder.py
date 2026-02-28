@@ -64,7 +64,10 @@ class ImageFolderDataset(Dataset):
                 f"No images with extensions {self.extensions} found in {self.root}"
             )
 
-        self._to_tensor = A.Compose([ToTensorV2()])
+        self._to_tensor = A.Compose([
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2(),
+        ])
 
     @property
     def classes(self) -> list[str]:

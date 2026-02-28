@@ -15,6 +15,8 @@ from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
+from tqdm import tqdm
+
 from simpleml.configs.config import Config
 from simpleml.metrics.base import Metric
 
@@ -29,6 +31,7 @@ _TRAINING_DEFAULTS: dict[str, Any] = {
     "grad_clip_value": None,
     "mixed_precision": False,
     "checkpoint_dir": "checkpoints",
+    "best_filename": "best.pt",
     "save_every": None,
     "save_best": True,
     "save_last": True,
@@ -162,6 +165,7 @@ class Trainer:
         last_metrics: dict[str, float] = {}
 
         for epoch in range(start_epoch, epochs):
+            print(f"\nEpoch {epoch + 1}/{epochs}")
             last_train_loss = self._train_one_epoch(epoch)
             self._log_metrics({"loss": last_train_loss}, epoch, prefix="train")
             self._log_metrics(
@@ -183,7 +187,14 @@ class Trainer:
                 self._log_metrics(last_metrics, epoch, prefix="val")
                 self._maybe_save_checkpoint(epoch, last_val_loss)
             else:
+                last_metrics = {}
                 self._maybe_save_checkpoint(epoch, None)
+
+            summary: dict[str, Any] = {"train_loss": f"{last_train_loss:.4f}"}
+            if last_val_loss is not None:
+                summary["val_loss"] = f"{last_val_loss:.4f}"
+            summary.update({k: f"{v:.4f}" for k, v in last_metrics.items()})
+            print("  " + "  ".join(f"{k}: {v}" for k, v in summary.items()))
 
         self._writer.close()
 
@@ -340,7 +351,7 @@ class Trainer:
         total_loss = 0.0
         num_batches = 0
 
-        for batch in self.train_loader:
+        for batch in tqdm(self.train_loader, desc=f"  train", leave=False):
             inputs, targets = batch[0].to(self.device), batch[1].to(self.device)
 
             self.optimizer.zero_grad()
@@ -402,7 +413,7 @@ class Trainer:
         for m in self.metrics:
             m.reset()
 
-        for batch in self.val_loader:
+        for batch in tqdm(self.val_loader, desc=f"  val  ", leave=False):
             inputs, targets = batch[0].to(self.device), batch[1].to(self.device)
             outputs = self.model(inputs)
             loss = self.loss_fn(outputs, targets)
@@ -430,7 +441,7 @@ class Trainer:
         if val_loss is not None and val_loss < self.best_val_loss:
             self.best_val_loss = val_loss
             if self._cfg["save_best"]:
-                self.save_checkpoint(ckpt_dir / "best.pt", epoch, val_loss)
+                self.save_checkpoint(ckpt_dir / self._cfg["best_filename"], epoch, val_loss)
 
         if self._cfg["save_every"] and (epoch + 1) % self._cfg["save_every"] == 0:
             self.save_checkpoint(ckpt_dir / f"epoch_{epoch + 1}.pt", epoch, val_loss)

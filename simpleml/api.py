@@ -181,12 +181,19 @@ class API:
     # Execution methods
     # ------------------------------------------------------------------
 
-    def fit(self, epochs: int | None = None, **kwargs: Any) -> dict[str, Any]:
+    def fit(
+        self,
+        epochs: int | None = None,
+        best: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Build a Trainer from the accumulated config and run training.
 
         Args:
             epochs: If given, overrides ``training.epochs`` for this run only
                 (does not mutate the stored config).
+            best: If given, overrides the filename used when saving the best
+                checkpoint (e.g. ``"resnet.pth"``).
             **kwargs: Additional training settings merged on top of
                 ``training`` for this run only.
 
@@ -196,10 +203,12 @@ class API:
         from simpleml.trainers import Trainer
 
         cfg = copy.deepcopy(self._config)
-        if epochs is not None or kwargs:
+        if epochs is not None or best is not None or kwargs:
             training = cfg.get("training", {})
             if epochs is not None:
                 training["epochs"] = epochs
+            if best is not None:
+                training["best_filename"] = best
             training.update(kwargs)
             cfg["training"] = training
 

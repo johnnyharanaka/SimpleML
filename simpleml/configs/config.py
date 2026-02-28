@@ -18,8 +18,30 @@ from simpleml.registries import (
     SCHEDULERS,
 )
 
+def _coerce_numbers(obj: Any) -> Any:
+    """Recursively convert numeric strings to int or float.
+
+    Allows YAML values like ``1e-3`` or ``"42"`` to be used as numbers even
+    when the YAML parser emits them as strings.
+    """
+    if isinstance(obj, dict):
+        return {k: _coerce_numbers(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_coerce_numbers(v) for v in obj]
+    if isinstance(obj, str):
+        try:
+            return int(obj)
+        except ValueError:
+            pass
+        try:
+            return float(obj)
+        except ValueError:
+            pass
+    return obj
+
+
 _REQUIRED_SECTIONS = {"model", "dataset", "loss", "optimizer"}
-_OPTIONAL_SECTIONS = {"scheduler", "metrics", "training"}
+_OPTIONAL_SECTIONS = {"scheduler", "metrics", "training", "inference"}
 _ALL_SECTIONS = _REQUIRED_SECTIONS | _OPTIONAL_SECTIONS
 
 
@@ -37,6 +59,7 @@ class Config:
     """
 
     def __init__(self, data: dict[str, Any]) -> None:
+        data = _coerce_numbers(data)
         self._validate(data)
         self._data = copy.deepcopy(data)
 
