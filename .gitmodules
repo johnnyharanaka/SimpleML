@@ -1,0 +1,3 @@
+[submodule "custom_models/dinov2"]
+	path = custom_models/dinov2
+	url = https://github.com/johnnyharanaka/WildFireClassification
