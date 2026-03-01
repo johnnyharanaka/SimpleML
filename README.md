@@ -14,12 +14,27 @@ trainer.fit()
 Requires Python 3.10+.
 
 ```bash
-# Clone the repo
-git clone https://github.com/your-username/SimpleML.git
+# Clone the repo with submodules
+git clone --recurse-submodules https://github.com/your-username/SimpleML.git
 cd SimpleML
 
 # Install with uv
 uv pip install -e ".[dev]"
+```
+
+> If you already cloned the repo without `--recurse-submodules`, initialize the submodules afterwards:
+>
+> ```bash
+> git submodule update --init --recursive
+> ```
+
+### Custom Models (submodule)
+
+The `custom_models/dinov2` directory is a Git submodule pointing to a fork of DINOv2 adapted for WSOD. It is required if you plan to use `DinoClassifier`, `LoRADinoClassifier`, or `DinoDetector`.
+
+```bash
+# If you only need the DINOv2 submodule
+git submodule update --init custom_models/dinov2
 ```
 
 ## Quick Start
