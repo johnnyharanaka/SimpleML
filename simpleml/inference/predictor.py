@@ -266,6 +266,9 @@ class Predictor:
     def evaluate(self, dataset: Dataset) -> dict[str, Any]:
         """Run prediction and compute metrics on a labeled dataset.
 
+        Dispatches to :meth:`_evaluate_detection` when the model exposes a
+        ``detect`` method, otherwise to :meth:`_evaluate_classification`.
+
         Args:
             dataset: A PyTorch Dataset returning ``(input, target)`` tuples.
 
@@ -273,16 +276,96 @@ class Predictor:
             Dict with ``predictions`` (PredictionResult) and ``metrics``
             (dict mapping metric name to computed value).
         """
+        collate_fn = getattr(dataset, 'collate_fn', None)
         loader = DataLoader(
             dataset,
             batch_size=self._cfg["batch_size"],
             shuffle=False,
             num_workers=self._cfg["num_workers"],
+            collate_fn=collate_fn,
         )
 
         for m in self.metrics:
             m.reset()
 
+        if hasattr(self.model, 'detect'):
+            all_logits = self._evaluate_detection(loader)
+        else:
+            all_logits = self._evaluate_classification(loader)
+
+        logits = torch.cat(all_logits, dim=0)
+        probs = torch.softmax(logits, dim=1)
+        classes = torch.argmax(logits, dim=1)
+        computed_metrics = {type(m).__name__: m.compute() for m in self.metrics}
+
+        return {
+            "predictions": PredictionResult(
+                logits=logits, probabilities=probs, predicted_classes=classes
+            ),
+            "metrics": computed_metrics,
+        }
+
+    def _evaluate_detection(self, loader: DataLoader) -> list[Tensor]:
+        """Evaluate loop for object-detection models.
+
+        Expects the model to expose a ``detect(inputs)`` method that returns
+        bounding boxes per image alongside the standard forward logits.
+
+        Args:
+            loader: DataLoader whose batches are ``(inputs, targets)`` where
+                targets are dicts with ``boxes`` and ``labels`` keys.
+
+        Returns:
+            List of logit tensors (one per batch) on CPU.
+        """
+        from simpleml.metrics.corloc import CorLoc
+        from simpleml.metrics.mean_average_precision import MeanAveragePrecision
+
+        all_logits: list[Tensor] = []
+        with torch.no_grad():
+            for batch in loader:
+                inputs = batch[0].float().to(self.device)
+                raw_targets = batch[1]
+
+                logits = self.model(inputs)
+                all_logits.append(logits.cpu())
+                boxes_per_image = self.model.detect(inputs)
+                pred_classes = logits.argmax(dim=1)
+
+                preds_map, targets_map = [], []
+                for i, (bboxes, target) in enumerate(zip(boxes_per_image, raw_targets)):
+                    cls = int(pred_classes[i].item())
+                    if bboxes:
+                        b_t = torch.tensor([[b[0], b[1], b[2], b[3]] for b in bboxes], dtype=torch.float32)
+                        s_t = torch.tensor([b[4] for b in bboxes], dtype=torch.float32)
+                        l_t = torch.full((len(bboxes),), cls, dtype=torch.long)
+                    else:
+                        b_t = torch.zeros(0, 4)
+                        s_t = torch.zeros(0)
+                        l_t = torch.zeros(0, dtype=torch.long)
+                    corloc_t = torch.cat([b_t, s_t.unsqueeze(1)], dim=1)
+                    gt_boxes = target['boxes']
+                    preds_map.append({'boxes': b_t, 'scores': s_t, 'labels': l_t})
+                    targets_map.append({'boxes': gt_boxes, 'labels': target['labels']})
+                    for m in self.metrics:
+                        if isinstance(m, CorLoc):
+                            m.update(corloc_t, gt_boxes)
+                for m in self.metrics:
+                    if isinstance(m, MeanAveragePrecision):
+                        m.update(preds_map, targets_map)
+
+        return all_logits
+
+    def _evaluate_classification(self, loader: DataLoader) -> list[Tensor]:
+        """Evaluate loop for classification models.
+
+        Args:
+            loader: DataLoader whose batches are ``(inputs, targets)`` where
+                targets are integer class indices.
+
+        Returns:
+            List of logit tensors (one per batch) on CPU.
+        """
         all_logits: list[Tensor] = []
         with torch.no_grad():
             for batch in loader:
@@ -292,19 +375,7 @@ class Predictor:
                 all_logits.append(logits.cpu())
                 for m in self.metrics:
                     m.update(logits, targets)
-
-        logits = torch.cat(all_logits, dim=0)
-        probs = torch.softmax(logits, dim=1)
-        classes = torch.argmax(logits, dim=1)
-
-        computed_metrics = {type(m).__name__: m.compute() for m in self.metrics}
-
-        return {
-            "predictions": PredictionResult(
-                logits=logits, probabilities=probs, predicted_classes=classes
-            ),
-            "metrics": computed_metrics,
-        }
+        return all_logits
 
     def evaluate_from_config(self, split: str = "test") -> dict[str, Any]:
         """Build a dataset from the stored config and evaluate on it.

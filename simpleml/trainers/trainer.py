@@ -61,7 +61,7 @@ class Trainer:
     def __init__(
         self,
         model: nn.Module,
-        loss_fn: nn.Module,
+        loss_fn: nn.Module | list[nn.Module],
         optimizer: torch.optim.Optimizer,
         train_dataset: Dataset,
         val_dataset: Dataset | None = None,
@@ -73,7 +73,7 @@ class Trainer:
 
         Args:
             model: The neural network to train.
-            loss_fn: Loss function module.
+            loss_fn: Loss function module, or list of modules for multi-loss models.
             optimizer: Optimizer bound to model parameters.
             train_dataset: Training dataset.
             val_dataset: Optional validation dataset.
@@ -87,7 +87,8 @@ class Trainer:
 
         self.device = self._resolve_device(self._cfg["device"])
         self.model = model.to(self.device)
-        self.loss_fn = loss_fn.to(self.device)
+        loss_list = loss_fn if isinstance(loss_fn, list) else [loss_fn]
+        self.loss_fns = [l.to(self.device) for l in loss_list]
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.metrics = metrics or []
@@ -127,7 +128,7 @@ class Trainer:
             config = Config.from_dict(config)
 
         model = config.build_model()
-        loss_fn = config.build_loss()
+        loss_fns = config.build_loss()
         optimizer = config.build_optimizer(model)
         scheduler = config.build_scheduler(optimizer)
         metrics = config.build_metrics()
@@ -141,7 +142,7 @@ class Trainer:
 
         return cls(
             model=model,
-            loss_fn=loss_fn,
+            loss_fn=loss_fns,
             optimizer=optimizer,
             train_dataset=train_dataset,
             val_dataset=val_dataset,
@@ -157,10 +158,19 @@ class Trainer:
     def fit(self) -> dict[str, Any]:
         """Run the full training loop.
 
+        If the model implements ``fit_loop(trainer)``, delegates the entire
+        training orchestration to it, enabling models to define custom multi-stage
+        or non-standard training flows without subclassing the Trainer.
+
         Returns:
             Dict with keys: ``last_train_loss``, ``last_val_loss``,
             ``best_val_loss``, ``last_metrics``, ``epochs_trained``.
         """
+        if hasattr(self.model, 'fit_loop'):
+            result = self.model.fit_loop(self)
+            self._writer.close()
+            return result
+
         start_epoch = 0
         if self._cfg["resume_from"] is not None:
             start_epoch = self.load_checkpoint(self._cfg["resume_from"])
@@ -341,16 +351,21 @@ class Trainer:
         Returns:
             A configured DataLoader.
         """
+        collate_fn = getattr(dataset, 'collate_fn', None)
         return DataLoader(
             dataset,
             batch_size=self._cfg["batch_size"],
             shuffle=shuffle,
             num_workers=self._cfg["num_workers"],
             pin_memory=self._cfg["pin_memory"],
+            collate_fn=collate_fn,
         )
 
     def _train_one_epoch(self, epoch: int) -> float:
         """Run one training epoch.
+
+        If the model implements ``training_step(batch, loss_fns)``, delegates
+        loss computation to it. Otherwise falls back to standard classification.
 
         Args:
             epoch: Current epoch index (for logging).
@@ -360,66 +375,78 @@ class Trainer:
         """
         self.model.train()
         total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
         num_batches = 0
 
         pbar = tqdm(self.train_loader, desc="  train", leave=False)
         for batch in pbar:
-            inputs, targets = batch[0].to(self.device), batch[1].to(self.device)
-
-            self.optimizer.zero_grad()
-
-            if self._use_amp:
-                with autocast("cuda"):
-                    outputs = self.model(inputs)
-                    loss = self.loss_fn(outputs, targets)
-                self._scaler.scale(loss).backward()
-                if self._cfg["grad_clip_norm"] is not None:
-                    self._scaler.unscale_(self.optimizer)
-                    nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self._cfg["grad_clip_norm"]
-                    )
-                if self._cfg["grad_clip_value"] is not None:
-                    self._scaler.unscale_(self.optimizer)
-                    nn.utils.clip_grad_value_(
-                        self.model.parameters(), self._cfg["grad_clip_value"]
-                    )
-                self._scaler.step(self.optimizer)
-                self._scaler.update()
-            else:
-                outputs = self.model(inputs)
-                loss = self.loss_fn(outputs, targets)
-                loss.backward()
-                if self._cfg["grad_clip_norm"] is not None:
-                    nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self._cfg["grad_clip_norm"]
-                    )
-                if self._cfg["grad_clip_value"] is not None:
-                    nn.utils.clip_grad_value_(
-                        self.model.parameters(), self._cfg["grad_clip_value"]
-                    )
-                self.optimizer.step()
+            loss = self._compute_loss(batch)
+            self._backward_step(loss)
 
             total_loss += loss.item()
-            total_correct += (outputs.argmax(dim=1) == targets).sum().item()
-            total_samples += targets.size(0)
             num_batches += 1
             self.global_step += 1
 
-            pbar.set_postfix({
-                "loss": f"{total_loss / num_batches:.4f}",
-                "acc": f"{total_correct / total_samples:.4f}",
-            })
+            pbar.set_postfix({"loss": f"{total_loss / num_batches:.4f}"})
 
             if self.scheduler and self._cfg["scheduler_step_on"] == "step":
                 self.scheduler.step()
 
         return total_loss / max(num_batches, 1)
 
+    def _compute_loss(self, batch: Any) -> torch.Tensor:
+        """Compute the training loss for one batch.
+
+        Delegates to ``model.training_step(batch, loss_fns)`` when available,
+        giving each model full control over its own loss computation. Falls back
+        to a standard forward + ``loss_fns[0]`` for plain classification models.
+
+        Args:
+            batch: Raw batch from the DataLoader.
+
+        Returns:
+            Scalar loss tensor (graph attached for backward).
+        """
+        if hasattr(self.model, 'training_step'):
+            if self._use_amp:
+                with autocast("cuda"):
+                    return self.model.training_step(batch, self.loss_fns)
+            return self.model.training_step(batch, self.loss_fns)
+
+        inputs = batch[0].to(self.device)
+        targets = batch[1].to(self.device)
+        if self._use_amp:
+            with autocast("cuda"):
+                return self.loss_fns[0](self.model(inputs), targets)
+        return self.loss_fns[0](self.model(inputs), targets)
+
+    def _backward_step(self, loss: torch.Tensor) -> None:
+        """Run backward pass and optimizer step, handling AMP and gradient clipping.
+
+        Args:
+            loss: Scalar loss tensor returned by :meth:`_compute_loss`.
+        """
+        self.optimizer.zero_grad()
+        if self._use_amp:
+            self._scaler.scale(loss).backward()
+            if self._cfg["grad_clip_norm"] is not None:
+                self._scaler.unscale_(self.optimizer)
+                nn.utils.clip_grad_norm_(self.model.parameters(), self._cfg["grad_clip_norm"])
+            if self._cfg["grad_clip_value"] is not None:
+                self._scaler.unscale_(self.optimizer)
+                nn.utils.clip_grad_value_(self.model.parameters(), self._cfg["grad_clip_value"])
+            self._scaler.step(self.optimizer)
+            self._scaler.update()
+        else:
+            loss.backward()
+            if self._cfg["grad_clip_norm"] is not None:
+                nn.utils.clip_grad_norm_(self.model.parameters(), self._cfg["grad_clip_norm"])
+            if self._cfg["grad_clip_value"] is not None:
+                nn.utils.clip_grad_value_(self.model.parameters(), self._cfg["grad_clip_value"])
+            self.optimizer.step()
+
     @torch.no_grad()
     def _validate_one_epoch(self, epoch: int) -> dict[str, Any]:
-        """Run one validation epoch.
+        """Run one validation epoch, dispatching to the appropriate loop.
 
         Args:
             epoch: Current epoch index (for logging).
@@ -428,26 +455,93 @@ class Trainer:
             Dict with ``loss`` (float) and ``metrics`` (dict of name -> value).
         """
         self.model.eval()
-        total_loss = 0.0
-        num_batches = 0
-
         for m in self.metrics:
             m.reset()
 
-        for batch in tqdm(self.val_loader, desc=f"  val  ", leave=False):
-            inputs, targets = batch[0].to(self.device), batch[1].to(self.device)
-            outputs = self.model(inputs)
-            loss = self.loss_fn(outputs, targets)
-            total_loss += loss.item()
-            num_batches += 1
-
-            for m in self.metrics:
-                m.update(outputs, targets)
+        if hasattr(self.model, 'detect'):
+            total_loss, num_batches = self._validate_detection()
+        else:
+            total_loss, num_batches = self._validate_classification()
 
         avg_loss = total_loss / max(num_batches, 1)
         computed_metrics = {type(m).__name__: m.compute() for m in self.metrics}
-
         return {"loss": avg_loss, "metrics": computed_metrics}
+
+    def _validate_detection(self) -> tuple[float, int]:
+        """Validation loop for detection models.
+
+        Computes classification loss from ``image_label`` targets and updates
+        detection metrics (CorLoc, MeanAveragePrecision) via ``model.detect``.
+
+        Returns:
+            Tuple of ``(total_loss, num_batches)``.
+        """
+        from simpleml.metrics.corloc import CorLoc
+        from simpleml.metrics.mean_average_precision import MeanAveragePrecision
+
+        total_loss = 0.0
+        num_batches = 0
+
+        for batch in tqdm(self.val_loader, desc="  val  ", leave=False):
+            inputs = batch[0].to(self.device)
+            raw_targets = batch[1]
+
+            image_labels = torch.tensor(
+                [t['image_label'] for t in raw_targets], dtype=torch.long
+            ).to(self.device)
+            outputs = self.model(inputs)
+            loss = self.loss_fns[0](outputs, image_labels)
+            total_loss += loss.item()
+            num_batches += 1
+
+            if self.metrics:
+                boxes_per_image = self.model.detect(inputs)
+                pred_classes = outputs.argmax(dim=1)
+
+                preds_map, targets_map = [], []
+                for i, (bboxes, target) in enumerate(zip(boxes_per_image, raw_targets)):
+                    cls = int(pred_classes[i].item())
+                    if bboxes:
+                        b_t = torch.tensor([[b[0], b[1], b[2], b[3]] for b in bboxes], dtype=torch.float32)
+                        s_t = torch.tensor([b[4] for b in bboxes], dtype=torch.float32)
+                        l_t = torch.full((len(bboxes),), cls, dtype=torch.long)
+                    else:
+                        b_t = torch.zeros(0, 4)
+                        s_t = torch.zeros(0)
+                        l_t = torch.zeros(0, dtype=torch.long)
+                    corloc_t = torch.cat([b_t, s_t.unsqueeze(1)], dim=1)
+                    gt_boxes = target['boxes']
+                    preds_map.append({'boxes': b_t, 'scores': s_t, 'labels': l_t})
+                    targets_map.append({'boxes': gt_boxes, 'labels': target['labels']})
+                    for m in self.metrics:
+                        if isinstance(m, CorLoc):
+                            m.update(corloc_t, gt_boxes)
+                for m in self.metrics:
+                    if isinstance(m, MeanAveragePrecision):
+                        m.update(preds_map, targets_map)
+
+        return total_loss, num_batches
+
+    def _validate_classification(self) -> tuple[float, int]:
+        """Validation loop for classification models.
+
+        Returns:
+            Tuple of ``(total_loss, num_batches)``.
+        """
+        total_loss = 0.0
+        num_batches = 0
+
+        for batch in tqdm(self.val_loader, desc="  val  ", leave=False):
+            inputs = batch[0].to(self.device)
+            targets = batch[1].to(self.device)
+            outputs = self.model(inputs)
+            loss = self.loss_fns[0](outputs, targets)
+            total_loss += loss.item()
+            num_batches += 1
+            for m in self.metrics:
+                m.update(outputs, targets)
+
+        return total_loss, num_batches
 
     def _maybe_save_checkpoint(
         self,

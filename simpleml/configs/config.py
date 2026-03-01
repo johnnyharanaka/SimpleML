@@ -97,8 +97,9 @@ class Config:
         if unknown:
             raise ValueError(f"Unknown config sections: {sorted(unknown)}")
 
-        for section in ("model", "loss", "optimizer"):
-            Config._validate_component(data[section], section)
+        Config._validate_component(data["model"], "model")
+        Config._validate_component(data["optimizer"], "optimizer")
+        Config._validate_loss(data["loss"])
 
         if "scheduler" in data:
             Config._validate_component(data["scheduler"], "scheduler")
@@ -107,6 +108,14 @@ class Config:
 
         if "metrics" in data:
             Config._validate_metrics(data["metrics"])
+
+    @staticmethod
+    def _validate_loss(section: Any) -> None:
+        if isinstance(section, list):
+            for i, entry in enumerate(section):
+                Config._validate_component(entry, f"loss[{i}]")
+        else:
+            Config._validate_component(section, "loss")
 
     @staticmethod
     def _validate_component(section: Any, name: str) -> None:
@@ -178,10 +187,18 @@ class Config:
             model.load_state_dict(state_dict)
         return model
 
-    def build_loss(self) -> Any:
-        """Build the loss function from the registry."""
+    def build_loss(self) -> list[Any]:
+        """Build loss functions from the registry.
+
+        Supports both a single loss (dict) and multiple losses (list of dicts).
+
+        Returns:
+            List of instantiated loss modules.
+        """
         sec = self._data["loss"]
-        return LOSSES.build(sec["name"], **sec.get("params", {}))
+        if isinstance(sec, list):
+            return [LOSSES.build(entry["name"], **entry.get("params", {})) for entry in sec]
+        return [LOSSES.build(sec["name"], **sec.get("params", {}))]
 
     def build_dataset(self, split: str = "train") -> Any:
         """Build a dataset for the given split from the registry."""
