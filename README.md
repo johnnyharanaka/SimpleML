@@ -28,15 +28,6 @@ uv pip install -e ".[dev]"
 > git submodule update --init --recursive
 > ```
 
-### Custom Models (submodule)
-
-The `custom_models/dinov2` directory is a Git submodule pointing to a fork of DINOv2 adapted for WSOD. It is required if you plan to use `DinoClassifier`, `LoRADinoClassifier`, or `DinoDetector`.
-
-```bash
-# If you only need the DINOv2 submodule
-git submodule update --init custom_models/dinov2
-```
-
 ## Quick Start
 
 ### 1. Organize your data
