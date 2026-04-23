@@ -40,11 +40,11 @@ All components live in `simpleml/` and are registered via `simpleml/registry.py`
 
 ## Design Patterns
 
-SimpleML é construído sobre o pattern **Modular Block**: cada componente é um bloco independente com interface uniforme, registrado por nome, e montado via config ou fluent API — igual a encaixar peças de LEGO.
+SimpleML is built on the **Modular Block** pattern: every component is a standalone block with a uniform interface, registered by name, and composed via config or fluent API — like snapping LEGO pieces together.
 
-### Regras do Modular Block
+### Modular Block Rules
 
-**1. Todo bloco pertence a uma categoria com sua própria Registry**
+**1. Every block belongs to a category with its own Registry**
 ```python
 # simpleml/registries.py
 MODELS    = Registry("models")
@@ -53,39 +53,40 @@ METRICS   = Registry("metrics")
 # ...
 ```
 
-**2. Todo bloco se registra com `@REGISTRY.register`**
+**2. Every block registers itself with `@REGISTRY.register`**
 ```python
 from simpleml.registries import MODELS
 
 @MODELS.register
-class MeuModelo(nn.Module):
+class MyModel(nn.Module):
     def __init__(self, num_classes: int) -> None: ...
     def forward(self, x: Tensor) -> Tensor: ...
 ```
 
-**3. Cada categoria tem uma interface base (ABC) que todos os blocos respeitam**
-- Modelos: `nn.Module` com `forward(x) -> Tensor`
-- Métricas: `Metric` com `update(preds, targets)` e `compute()`
-- Losses: `nn.Module` com `forward(preds, targets) -> Tensor`
-- Datasets: `torch.utils.data.Dataset` com `__len__` e `__getitem__`
+**3. Each category has a base interface (ABC) that every block respects**
+- Models: `nn.Module` with `forward(x) -> Tensor`
+- Metrics: `Metric` with `update(preds, targets)` and `compute()`
+- Losses: `nn.Module` with `forward(preds, targets) -> Tensor`
+- Datasets: `torch.utils.data.Dataset` with `__len__` and `__getitem__`
 
-**4. Blocos são compostos por config dict ou fluent API — nunca acoplados entre si**
+**4. Blocks are composed via config dict or fluent API — never coupled to each other**
 ```python
 # Via YAML / dict
-{"name": "MeuModelo", "params": {"num_classes": 10}}
+{"name": "MyModel", "params": {"num_classes": 10}}
 
 # Via fluent API
-API().model("MeuModelo", num_classes=10).loss("FocalLoss").fit()
+API().model("MyModel", num_classes=10).loss("FocalLoss").fit()
 ```
 
-**5. Ao criar um novo bloco, siga sempre esta ordem:**
-1. Escreva o teste em `tests/<categoria>/test_<nome>.py` (TDD)
-2. Crie a classe no módulo correto herdando da interface base
-3. Decore com `@REGISTRY.register`
-4. Exporte no `__init__.py` da categoria
+**5. When creating a new block, always follow this order:**
+1. Write the test in `tests/<category>/test_<name>.py` (TDD)
+2. Create the class in the correct module, inheriting from the base interface
+3. Decorate with `@REGISTRY.register`
+4. Export it in the category's `__init__.py`
 
 ## Development Guidelines
 
+- **All code, comments, docstrings, and tests must be written in English.**
 - **TDD**: write tests before implementing. New features and bug fixes must have tests.
 - Tests live in `tests/`. Mirror the `simpleml/` structure (e.g. `simpleml/metrics/accuracy.py` → `tests/metrics/test_accuracy.py`).
 - All tests must pass before committing: `uv run pytest`.
