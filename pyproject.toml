@@ -19,10 +19,15 @@ dependencies = [
     "tqdm>=4.64",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.0",
     "ruff>=0.4",
+]
+desktop = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.0",
 ]
 
 [tool.setuptools.packages.find]
