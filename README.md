@@ -14,19 +14,13 @@ trainer.fit()
 Requires Python 3.10+.
 
 ```bash
-# Clone the repo with submodules
-git clone --recurse-submodules https://github.com/your-username/SimpleML.git
+# Clone the repo
+git clone https://github.com/your-username/SimpleML.git
 cd SimpleML
 
 # Install with uv
 uv pip install -e ".[dev]"
 ```
-
-> If you already cloned the repo without `--recurse-submodules`, initialize the submodules afterwards:
->
-> ```bash
-> git submodule update --init --recursive
-> ```
 
 ## Quick Start
 
@@ -262,12 +256,12 @@ All components are registered by name and selected via config.
 
 | Category    | Components                                                       |
 |-------------|------------------------------------------------------------------|
-| Models      | `TimmModel` (any [timm](https://github.com/huggingface/pytorch-image-models) architecture), `DinoClassifier`, `LoRADinoClassifier` |
+| Models      | `TimmModel` (any [timm](https://github.com/huggingface/pytorch-image-models) architecture) |
 | Losses      | `CrossEntropyLoss`, `BCEWithLogitsLoss`, `FocalLoss`, `NTXentLoss`, `SupConLoss`, `TripletMarginLoss` |
 | Optimizers  | `Adam`, `AdamW`, `SGD`, `RMSprop`                                |
 | Schedulers  | `StepLR`, `CosineAnnealingLR`, `CosineAnnealingWarmRestarts`, `OneCycleLR` |
-| Metrics     | `Accuracy`, `F1Score`, `Precision`, `Recall`, `AUROC`, `ConfusionMatrix` |
-| Datasets    | `ImageFolderDataset`, `COCOClassificationDataset`                |
+| Metrics     | `Accuracy`, `F1Score`, `Precision`, `Recall`, `AUROC`, `ConfusionMatrix`, `MeanAveragePrecision`, `CorLoc` |
+| Datasets    | `ImageFolderDataset`, `COCOClassificationDataset`, `COCODetectionDataset` |
 
 ## Best Checkpoint by Metric
 
