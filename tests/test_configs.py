@@ -19,8 +19,8 @@ def _minimal_config() -> dict:
     """Return a minimal valid config dict."""
     return {
         "model": {
-            "name": "TimmModel",
-            "params": {"model_name": "resnet18", "num_classes": 10},
+            "name": "ResNet",
+            "params": {"variant": "resnet18", "num_classes": 10},
         },
         "dataset": {
             "train": {"name": "ImageFolderDataset", "params": {"root": "/tmp/train"}},
@@ -106,13 +106,13 @@ class TestConfigValidation:
 
     def test_model_missing_name(self) -> None:
         data = _minimal_config()
-        data["model"] = {"params": {"model_name": "resnet18"}}
+        data["model"] = {"params": {"variant": "resnet18"}}
         with pytest.raises(ValueError, match="must contain a 'name' key"):
             Config(data)
 
     def test_model_not_a_dict(self) -> None:
         data = _minimal_config()
-        data["model"] = "TimmModel"
+        data["model"] = "ResNet"
         with pytest.raises(TypeError, match="'model' section must be a mapping"):
             Config(data)
 
@@ -196,7 +196,7 @@ class TestConfigProperties:
         cfg = Config(original)
         data = cfg.data
         data["model"]["name"] = "MUTATED"
-        assert cfg.data["model"]["name"] == "TimmModel"
+        assert cfg.data["model"]["name"] == "ResNet"
 
     def test_training_present(self) -> None:
         cfg = Config(_full_config())

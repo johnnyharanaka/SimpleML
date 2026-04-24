@@ -113,8 +113,8 @@ class TestFromConfig:
         """Predictor can be built from a plain dict."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }
@@ -126,8 +126,8 @@ class TestFromConfig:
         """Predictor can be built from a YAML file."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }
@@ -142,8 +142,8 @@ class TestFromConfig:
         """Metrics section is built from config."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "metrics": [
                 {"name": "Accuracy"},
@@ -158,8 +158,8 @@ class TestFromConfig:
         """Raw config is stored for evaluate_from_config."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }
@@ -180,9 +180,7 @@ class TestFromConfig:
         """Loads weights from a Trainer-format checkpoint (model_state_dict key)."""
         from simpleml.registries import MODELS
 
-        ref_model = MODELS.build(
-            "TimmModel", model_name="resnet18", num_classes=_NUM_CLASSES
-        )
+        ref_model = MODELS.build("ResNet", variant="resnet18", num_classes=_NUM_CLASSES)
         ckpt_path = tmp_path / "trainer_ckpt.pt"
         torch.save(
             {
@@ -195,8 +193,8 @@ class TestFromConfig:
 
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }
@@ -207,8 +205,8 @@ class TestFromConfig:
         """Loads weights from a plain state_dict checkpoint."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }
@@ -435,8 +433,8 @@ class TestEvaluateFromConfig:
         root = _create_image_folder_dataset(tmp_path)
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": 2},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": 2},
             },
             "dataset": {
                 "test": {
@@ -457,8 +455,8 @@ class TestEvaluateFromConfig:
         root = _create_image_folder_dataset(tmp_path)
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": 2},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": 2},
             },
             "dataset": {
                 "val": {
@@ -483,8 +481,8 @@ class TestEvaluateFromConfig:
         """Raises KeyError when split not found in config."""
         cfg = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "inference": {"device": "cpu"},
         }

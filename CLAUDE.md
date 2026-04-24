@@ -26,7 +26,7 @@ All components live in `simpleml/` and are registered via `simpleml/registry.py`
 
 | Module | Contents |
 |---|---|
-| `models/` | TimmModel |
+| `models/` | ResNet, ViT |
 | `losses/` | CrossEntropy, BCE, Focal, NTXent, SupCon, Triplet |
 | `metrics/` | Accuracy, F1Score, Precision, Recall, AUROC, ConfusionMatrix, mAP, CorLoc |
 | `datasets/` | ImageFolderDataset, COCOClassificationDataset, COCODetectionDataset |

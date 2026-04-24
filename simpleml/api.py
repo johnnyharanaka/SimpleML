@@ -8,11 +8,20 @@ from typing import Any
 
 import yaml
 
-_RESERVED = frozenset({
-    "data", "metrics", "train_config", "infer_config",
-    "fit", "evaluate", "predict_image", "predict_batch",
-    "from_yaml", "to_config",
-})
+_RESERVED = frozenset(
+    {
+        "data",
+        "metrics",
+        "train_config",
+        "infer_config",
+        "fit",
+        "evaluate",
+        "predict_image",
+        "predict_batch",
+        "from_yaml",
+        "to_config",
+    }
+)
 
 
 class API:
@@ -29,7 +38,7 @@ class API:
 
         results = (
             API()
-            .model("TimmModel", model_name="resnet18", pretrained=True, num_classes=10)
+            .model("ResNet", variant="resnet18", pretrained=True, num_classes=10)
             .loss("CrossEntropyLoss")
             .optimizer("AdamW", lr=1e-3)
             .data(train="data/train", val="data/val")
@@ -233,7 +242,9 @@ class API:
         from simpleml.inference import Predictor
 
         cfg = copy.deepcopy(self._config)
-        return Predictor.from_config(cfg, checkpoint=checkpoint).evaluate_from_config(split)
+        return Predictor.from_config(cfg, checkpoint=checkpoint).evaluate_from_config(
+            split
+        )
 
     def predict_image(
         self,

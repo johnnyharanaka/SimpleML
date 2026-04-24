@@ -1,7 +1,7 @@
 model:
-  name: TimmModel
+  name: ResNet
   params:
-    model_name: resnet18
+    variant: resnet18
     pretrained: true
     num_classes: 10
 

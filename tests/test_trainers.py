@@ -610,8 +610,8 @@ class TestFromConfig:
 
         cfg_data = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": 4},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": 4},
             },
             "dataset": {
                 "train": {
@@ -643,8 +643,8 @@ class TestFromConfig:
     def test_from_config_object(self) -> None:
         cfg_data = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "dataset": {
                 "train": {
@@ -663,8 +663,8 @@ class TestFromConfig:
     def test_from_config_dict(self) -> None:
         cfg_data = {
             "model": {
-                "name": "TimmModel",
-                "params": {"model_name": "resnet18", "num_classes": _NUM_CLASSES},
+                "name": "ResNet",
+                "params": {"variant": "resnet18", "num_classes": _NUM_CLASSES},
             },
             "dataset": {
                 "train": {

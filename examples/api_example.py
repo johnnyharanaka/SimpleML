@@ -4,7 +4,7 @@ from simpleml import API
 
 exp = (
     API()
-    .model("TimmModel", model_name="resnet18", pretrained=True, num_classes=10)
+    .model("ResNet", variant="resnet18", pretrained=True, num_classes=10)
     .loss("CrossEntropyLoss", label_smoothing=0.1)
     .optimizer("AdamW", lr=1e-3, weight_decay=1e-4)
     .scheduler("CosineAnnealingLR", T_max=20)
