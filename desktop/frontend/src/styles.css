@@ -1,0 +1,71 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0c0c12;
+  --surface: #13131e;
+  --surface2: #1a1a28;
+  --surface3: #21212f;
+  --border: #2a2a3d;
+  --border2: #35355a;
+  --accent: #8b5cf6;
+  --accent2: #06b6d4;
+  --accent-dim: rgba(139, 92, 246, 0.15);
+  --accent2-dim: rgba(6, 182, 212, 0.12);
+  --text: #e2e2f2;
+  --text2: #9090b8;
+  --text3: #5a5a7a;
+  --green: #22c55e;
+  --red: #f43f5e;
+  --yellow: #eab308;
+  --font: "Inter", sans-serif;
+  --mono: "JetBrains Mono", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 3px;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
